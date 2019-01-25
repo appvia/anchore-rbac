@@ -16,11 +16,19 @@ limitations under the License.
 
 package authorization
 
-import "strings"
+import (
+	"strings"
+)
 
 // contains checks if the string exists in a list
 func contains(v string, list []string) bool {
+	if v == "*" {
+		return true
+	}
 	for _, x := range list {
+		if x == "*" {
+			return true
+		}
 		if strings.ToLower(x) == strings.ToLower(v) {
 			return true
 		}

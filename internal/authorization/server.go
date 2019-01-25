@@ -18,6 +18,7 @@ package authorization
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
@@ -114,25 +115,26 @@ func (a *authzService) Authorize(request *models.AuthorizationRequest) (*models.
 		return decision, nil
 	}
 
+	permissions := a.getPermissions()
+
+	// @check the principal exists
+	acl, found := permissions.Principals[principal]
+	if !found {
+		decision.Denied = request.Actions
+
+		return decision, nil
+	}
+
 	err := func() error {
-		permissions := a.getPermissions()
 
-		// @check the principal exists
-		acl, found := permissions.Principals[principal]
-		if !found {
-			decision.Denied = request.Actions
-
-			return nil
-		}
-
-		for _, action := range request.Actions {
+		for _, x := range request.Actions {
 			permitted := func() bool {
-				domain := sv(action.Domain)
-				operation := sv(action.Action)
-				target := sv(action.Target)
+				action := sv(x.Action)
+				domain := sv(x.Domain)
+				target := sv(x.Target)
 
 				// @step: we check if the principal is permitted to act in the domain
-				if !contains(domain, append([]string{"*"}, acl.Domains...)) {
+				if !contains(domain, acl.Domains) {
 					return false
 				}
 
@@ -145,12 +147,11 @@ func (a *authzService) Authorize(request *models.AuthorizationRequest) (*models.
 						}
 
 						// @step: we check the role has the require action
-						if !contains(operation, append([]string{"*"}, role.Actions...)) {
+						if !contains(action, role.Actions) {
 							continue
 						}
-
 						// @step: so the role has the action, now lets check it has the target
-						if contains(target, append([]string{"*"}, role.Targets...)) {
+						if contains(target, role.Targets) {
 							return true
 						}
 					}
@@ -164,9 +165,9 @@ func (a *authzService) Authorize(request *models.AuthorizationRequest) (*models.
 
 			switch permitted {
 			case true:
-				decision.Allowed = append(decision.Allowed, action)
+				decision.Allowed = append(decision.Allowed, x)
 			default:
-				decision.Denied = append(decision.Denied, action)
+				decision.Denied = append(decision.Denied, x)
 			}
 		}
 
@@ -182,10 +183,14 @@ func (a *authzService) Authorize(request *models.AuthorizationRequest) (*models.
 	// @step: print a logging message for request which has been denied
 	if len(decision.Denied) > 0 {
 		fields := log.Fields{
+			"domains":   strings.Join(acl.Domains, ","),
 			"principal": principal,
+			"roles":     strings.Join(acl.Roles, ","),
 		}
 		for i, x := range decision.Denied {
-			fields[fmt.Sprintf("action.%d", i)] = sv(x.Action)
+			fields[fmt.Sprintf("action.%d.name", i)] = sv(x.Action)
+			fields[fmt.Sprintf("action.%d.domain", i)] = sv(x.Domain)
+			fields[fmt.Sprintf("action.%d.target", i)] = sv(x.Target)
 		}
 		log.WithFields(fields).Warn("principal has been denied")
 	}

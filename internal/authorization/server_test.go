@@ -72,6 +72,10 @@ roles:
 func makeTestAccounts() *Permissions {
 	return &Permissions{
 		Roles: map[string]*Role{
+			"admin": {
+				Actions: []string{"*"},
+				Targets: []string{"*"},
+			},
 			"analyzer": {
 				Actions: []string{
 					"createImage",
@@ -106,6 +110,10 @@ func makeTestAccounts() *Permissions {
 			},
 		},
 		Principals: map[string]*Principal{
+			"root": {
+				Roles:   []string{"admin"},
+				Domains: []string{"default"},
+			},
 			"analyzer": {
 				Roles:   []string{"analyzer"},
 				Domains: []string{"default"},
@@ -246,6 +254,24 @@ func TestAuthorize(t *testing.T) {
 		},
 		{
 			Request: &models.AuthorizationRequest{
+				Principal: &models.Principal{Name: s("root")},
+				Actions: models.ActionSet{
+					{Action: s("createImage"), Domain: s("default"), Target: s("*")},
+					{Action: s("listRegistries"), Domain: s("default"), Target: s("*")},
+				},
+			},
+			Expected: &models.AuthorizationDecision{
+				Principal: &models.Principal{Name: s("root")},
+				Allowed: models.ActionSet{
+					{Action: s("createImage"), Domain: s("default"), Target: s("*")},
+					{Action: s("listRegistries"), Domain: s("default"), Target: s("*")},
+				},
+				Denied: models.ActionSet{},
+				TTL:    &defaultTTL,
+			},
+		},
+		{
+			Request: &models.AuthorizationRequest{
 				Principal: &models.Principal{Name: s("combined")},
 				Actions: models.ActionSet{
 					{Action: s("createImage"), Domain: s("default"), Target: s("*")},
@@ -266,13 +292,11 @@ func TestAuthorize(t *testing.T) {
 			},
 		},
 	}
-	for _, c := range cases {
+	for i, c := range cases {
 		decision, err := svc.Authorize(c.Request)
 		assert.NoError(t, err)
-		if !assert.Equal(t, c.Expected, decision) {
-			fmt.Printf("EXPECTED: %s\n", spew.Sdump(c.Expected))
+		if !assert.Equal(t, c.Expected, decision, "case %d failed the expected", i) {
 			fmt.Printf("GOT: %s\n", spew.Sdump(decision))
-
 		}
 	}
 }
