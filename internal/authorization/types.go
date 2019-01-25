@@ -52,6 +52,8 @@ type Role struct {
 
 // Principal defines the anchore account and the roles they have
 type Principal struct {
+	// Domains is a list of domains the principal exists in
+	Domains []string `json:"domains" yaml:"domains"`
 	// Name is the name of the domain / account
 	Name string `json:"name" yaml:"name"`
 	// Roles is a collection of roles they have

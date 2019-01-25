@@ -2,10 +2,13 @@
 principles:
 - name: analyzer
   roles: [analyzer]
+  domain: [acp]
 - name: admin:
   roles: [admin]
+  domain: [acp]
 - reporter:
   roles: [reporter]
+  domains: [acp]
 
 roles:
 - name: admin
