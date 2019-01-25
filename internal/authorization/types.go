@@ -37,13 +37,11 @@ type Interface interface {
 	// Health is called is check the status
 	Health() error
 	// UpdatePermissions allows you to update the accounts permisions
-	UpdatePermissions(*Accounts) error
+	UpdatePermissions(*Permissions) error
 }
 
 // Role defines the permissions of a role in the system
 type Role struct {
-	// Name is the name of the domain
-	Name string `json:"name" yaml:"name"`
 	// Actions is a collection of actions they can perform
 	Actions []string `json:"actions" yaml:"actions"`
 	// Targets is a collection of targets the actions can be applied
@@ -54,16 +52,14 @@ type Role struct {
 type Principal struct {
 	// Domains is a list of domains the principal exists in
 	Domains []string `json:"domains" yaml:"domains"`
-	// Name is the name of the domain / account
-	Name string `json:"name" yaml:"name"`
 	// Roles is a collection of roles they have
 	Roles []string `json:"roles" yaml:"roles"`
 }
 
-// Accounts is the accounting format
-type Accounts struct {
+// Permissions is the accounting format
+type Permissions struct {
 	// Roles is a map of roles and the permissions
-	Roles []*Role `json:"roles" yaml:"roles"`
+	Roles map[string]*Role `json:"roles" yaml:"roles"`
 	// Principals is the map of domains and their roles
-	Principals []*Principal `json:"principals" yaml:"principals"`
+	Principals map[string]*Principal `json:"principals" yaml:"principals"`
 }

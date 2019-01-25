@@ -18,7 +18,6 @@ package authorization
 
 import (
 	"fmt"
-	"strings"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
@@ -29,14 +28,14 @@ import (
 
 type authzService struct {
 	sync.RWMutex
-
-	principals map[string][]string
+	// the permission for the principals
+	permissions *Permissions
 }
 
 // New creates and returns a new authorization service
-func New(accounts *Accounts) (Interface, error) {
+func New(permissions *Permissions) (Interface, error) {
 	svc := &authzService{}
-	if err := svc.UpdatePermissions(accounts); err != nil {
+	if err := svc.UpdatePermissions(permissions); err != nil {
 		return nil, err
 	}
 
@@ -46,15 +45,15 @@ func New(accounts *Accounts) (Interface, error) {
 // NewFromReloadable creates and returns a authorization service
 func NewFromReloadable(filename string) (Interface, error) {
 	svc := &authzService{}
-	accounts := &Accounts{}
+	permissions := &Permissions{}
 
 	// @step: read in the account for the first time
 	watcher := utils.NewWatcher(filename)
-	if err := watcher.Read(accounts); err != nil {
+	if err := watcher.Read(permissions); err != nil {
 		return nil, err
 	}
 
-	if err := svc.UpdatePermissions(accounts); err != nil {
+	if err := svc.UpdatePermissions(permissions); err != nil {
 		return nil, err
 	}
 
@@ -65,7 +64,7 @@ func NewFromReloadable(filename string) (Interface, error) {
 		UpdatedFunc: func() {
 			// @step: attempt to read in the configuration and set it
 			if err := func() error {
-				nc := &Accounts{}
+				nc := &Permissions{}
 
 				log.Info("received an update from watcher the configuration has changed")
 
@@ -107,7 +106,7 @@ func (a *authzService) Authorize(request *models.AuthorizationRequest) (*models.
 	}
 
 	// @check the request contains a principal
-	principal := strings.ToLower(sv(request.Principal.Name))
+	principal := sv(request.Principal.Name)
 	if principal == "" {
 		log.Error("request does not contain a principal, unable to continue")
 		decision.Denied = request.Actions
@@ -116,30 +115,58 @@ func (a *authzService) Authorize(request *models.AuthorizationRequest) (*models.
 	}
 
 	err := func() error {
-		// @step: build a action list of all actions the principal is allowed to perform (not we are not using
-		// resource level permisions here)
-		permitted, found := a.getPermissions(principal)
+		permissions := a.getPermissions()
+
+		// @check the principal exists
+		acl, found := permissions.Principals[principal]
 		if !found {
 			decision.Denied = request.Actions
+
 			return nil
 		}
 
-		// @step: iterate the actions requested against the principle
-		for _, x := range request.Actions {
-			found := func() bool {
-				for _, j := range permitted {
-					if strings.ToLower(sv(x.Action)) == strings.ToLower(j) {
-						return true
-					}
+		for _, action := range request.Actions {
+			permitted := func() bool {
+				domain := sv(action.Domain)
+				operation := sv(action.Action)
+				target := sv(action.Target)
+
+				// @step: we check if the principal is permitted to act in the domain
+				if !contains(domain, append([]string{"*"}, acl.Domains...)) {
+					return false
 				}
 
-				return false
+				matched := func() bool {
+					// @step: we iterate the role of the principle
+					for _, name := range acl.Roles {
+						role, found := permissions.Roles[name]
+						if !found {
+							continue
+						}
+
+						// @step: we check the role has the require action
+						if !contains(operation, append([]string{"*"}, role.Actions...)) {
+							continue
+						}
+
+						// @step: so the role has the action, now lets check it has the target
+						if contains(target, append([]string{"*"}, role.Targets...)) {
+							return true
+						}
+					}
+
+					// @step: we've iterating all the roles and nothing has it
+					return false
+				}()
+
+				return matched
 			}()
 
-			if !found {
-				decision.Denied = append(decision.Denied, x)
-			} else {
-				decision.Allowed = append(decision.Allowed, x)
+			switch permitted {
+			case true:
+				decision.Allowed = append(decision.Allowed, action)
+			default:
+				decision.Denied = append(decision.Denied, action)
 			}
 		}
 
@@ -186,21 +213,31 @@ func (a *authzService) DeleteDomain(domain *models.Domain) error {
 
 // Domains is called to list all the domains
 func (a *authzService) Domains() (models.DomainList, error) {
-	var list models.DomainList
+	var list []string
 
-	for _, x := range a.getPrincipals() {
-		list = append(list, &models.Domain{Name: s(x)})
+	for _, principal := range a.getPermissions().Principals {
+		for _, x := range principal.Domains {
+			if !contains(x, list) {
+				list = append(list, x)
+			}
+		}
 	}
 
-	return list, nil
+	var domains models.DomainList
+
+	for _, x := range list {
+		domains = append(domains, &models.Domain{Name: s(x)})
+	}
+
+	return domains, nil
 }
 
 // Principals is called to list all the principals
 func (a *authzService) Principals() (models.PrincipalList, error) {
 	var list models.PrincipalList
 
-	for _, x := range a.getPrincipals() {
-		list = append(list, &models.Principal{Name: s(x)})
+	for name := range a.getPermissions().Principals {
+		list = append(list, &models.Principal{Name: s(name)})
 	}
 
 	return list, nil
@@ -230,65 +267,29 @@ func (a *authzService) Health() error {
 }
 
 // UpdatePermissions attempts to update the service permissions
-func (a *authzService) UpdatePermissions(accounts *Accounts) error {
+func (a *authzService) UpdatePermissions(permissions *Permissions) error {
 	// @check the account are ok
-	if err := validateAccounts(accounts); err != nil {
+	if err := validatePermissions(permissions); err != nil {
 		log.WithFields(log.Fields{
 			"error": err.Error(),
-		}).Error("failed to update permissions, accounts are invalid")
+		}).Error("failed to update permissions, permissions are invalid")
 
 		return err
 	}
-
-	// @step: build a map of roles
-	roles := make(map[string]*Role, 0)
-	for _, x := range accounts.Roles {
-		roles[x.Name] = x
-	}
-
-	principals := make(map[string][]string, 0)
-
-	// @step: build a cache of principals and their permissions
-	for _, x := range accounts.Principals {
-		var list []string
-		for _, j := range x.Roles {
-			list = append(list, roles[j].Actions...)
-		}
-		principals[x.Name] = list
-	}
-
 	a.Lock()
 	defer a.Unlock()
 
-	a.principals = principals
+	a.permissions = permissions
 
 	return nil
 }
 
-// getPrincipals returns a list of principals
-func (a *authzService) getPrincipals() []string {
-	a.RLock()
-	defer a.RUnlock()
-
-	var list []string
-	for name := range a.principals {
-		list = append(list, name)
-	}
-
-	return list
-}
-
 // getPermissions returns the permissions for the principal
-func (a *authzService) getPermissions(principal string) ([]string, bool) {
+func (a *authzService) getPermissions() *Permissions {
 	a.RLock()
 	defer a.RUnlock()
 
-	perms, found := a.principals[principal]
-	if !found {
-		return []string{}, false
-	}
-
-	return perms, true
+	return a.permissions
 }
 
 func s(v string) *string {

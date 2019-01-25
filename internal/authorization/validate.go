@@ -21,44 +21,32 @@ import (
 	"fmt"
 )
 
-// validateAccounts is responsible for checking the accounts
-func validateAccounts(accounts *Accounts) error {
-	if len(accounts.Roles) <= 0 {
+// validatePermissions is responsible for checking the permissions
+func validatePermissions(permissions *Permissions) error {
+	if len(permissions.Roles) <= 0 {
 		return errors.New("no role defined")
 	}
 
 	// @step: build a map of the roles
-	roles := make(map[string]*Role, 0)
-	for i, x := range accounts.Roles {
+	for name, x := range permissions.Roles {
 		if err := validateRole(x); err != nil {
-			return fmt.Errorf("roles[%d] %s", i, err)
+			return fmt.Errorf("roles.%s %s", name, err)
 		}
-		roles[x.Name] = x
 	}
 
-	encountered := make(map[string]*Principal, 0)
-
 	// @step: iterate the principle and make sure they have a valid role
-	for i, x := range accounts.Principals {
-
+	for name, x := range permissions.Principals {
 		// @check the principal is ok
 		if err := validatePrincipal(x); err != nil {
-			return fmt.Errorf("principals[%d] %s", i, err)
+			return fmt.Errorf("principals.%s %s", name, err)
 		}
 
 		// @check the roles the principal has exist
-		for _, r := range x.Roles {
-			if _, found := roles[r]; !found {
+		for i, r := range x.Roles {
+			if _, found := permissions.Roles[r]; !found {
 				return fmt.Errorf("principals[%d].role %s does not exist", i, r)
 			}
 		}
-
-		// @check the principal name is not already used
-		if _, found := encountered[x.Name]; found {
-			return fmt.Errorf("principals[%d].name %s already defined", i, x.Name)
-		}
-
-		encountered[x.Name] = x
 	}
 
 	return nil
@@ -66,18 +54,11 @@ func validateAccounts(accounts *Accounts) error {
 
 // validatePrincipal is responsible for checking the principle
 func validatePrincipal(principal *Principal) error {
-	if principal.Name == "" {
-		return errors.New("no name for principal")
-	}
-
 	return nil
 }
 
 // validateAccounts is responsible for checking the role
 func validateRole(role *Role) error {
-	if role.Name == "" {
-		return errors.New("no role name defined")
-	}
 	if len(role.Actions) <= 0 {
 		return errors.New("no role actions defined")
 	}

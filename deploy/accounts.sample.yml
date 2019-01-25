@@ -1,89 +1,89 @@
 
-principles:
+principals:
 - name: analyzer
   roles: [analyzer]
   domain: [acp]
 - name: admin:
   roles: [admin]
   domain: [acp]
-- reporter:
+- name: reporter:
   roles: [reporter]
   domains: [acp]
 
 roles:
-- name: admin
-  actions: ['*']
-  targets: ['*']
-- name: accounts
-  actions:
-  - createRoleMember
-  - createUser
-  - deleteRoleMember
-  - deleteUser
-  - getRole
-  - listRoleMembers
-  - listRoles
-  - listUsers
-  - updateUser
-  targets: ['*']
-- name: reporter
-  actions:
-  - getEvent
-  - getImage
-  - getImageEvaluation
-  - getPolicy
-  - getRegistry
-  - getService
-  - getSubscription
-  - listEvents
-  - listFeeds
-  - listImages
-  - listPolicies
-  - listRegistries
-  - listServices
-  - listSubscriptions
-  targets: ['*']
-- name: analyzer
-  actions:
-  - createImage
-  - getEvent
-  - getImage
-  - getImageEvaluation
-  - getSubscription
-  - listEvents
-  - listImages
-  - listSubscriptions
-  targets: ['*']
-- name: editor
-  actions:
-  - createImage
-  - createPolicy
-  - createRegistry
-  - createRepository
-  - createSubscription
-  - deleteEvents
-  - deleteImage
-  - deletePolicy
-  - deleteRegistry
-  - deleteSubscription
-  - getAccount
-  - getEvent
-  - getImage
-  - getImageEvaluation
-  - getPolicy
-  - getRegistry
-  - getService
-  - getSubscription
-  - importImage
-  - listEvents
-  - listFeeds
-  - listImages
-  - listPolicies
-  - listRegistries
-  - listServices
-  - listSubscriptions
-  - updateFeeds
-  - updatePolicy
-  - updateRegistry
-  - updateSubscription
-  targets: ['*']
+  admin:
+    actions: ['*']
+    targets: ['*']
+  accounts:
+    actions:
+    - createRoleMember
+    - createUser
+    - deleteRoleMember
+    - deleteUser
+    - getRole
+    - listRoleMembers
+    - listRoles
+    - listUsers
+    - updateUser
+    targets: ['*']
+  reporter:
+    actions:
+    - getEvent
+    - getImage
+    - getImageEvaluation
+    - getPolicy
+    - getRegistry
+    - getService
+    - getSubscription
+    - listEvents
+    - listFeeds
+    - listImages
+    - listPolicies
+    - listRegistries
+    - listServices
+    - listSubscriptions
+    targets: ['*']
+  analyzer:
+    actions:
+    - createImage
+    - getEvent
+    - getImage
+    - getImageEvaluation
+    - getSubscription
+    - listEvents
+    - listImages
+    - listSubscriptions
+    targets: ['*']
+  editor:
+    actions:
+    - createImage
+    - createPolicy
+    - createRegistry
+    - createRepository
+    - createSubscription
+    - deleteEvents
+    - deleteImage
+    - deletePolicy
+    - deleteRegistry
+    - deleteSubscription
+    - getAccount
+    - getEvent
+    - getImage
+    - getImageEvaluation
+    - getPolicy
+    - getRegistry
+    - getService
+    - getSubscription
+    - importImage
+    - listEvents
+    - listFeeds
+    - listImages
+    - listPolicies
+    - listRegistries
+    - listServices
+    - listSubscriptions
+    - updateFeeds
+    - updatePolicy
+    - updateRegistry
+    - updateSubscription
+    targets: ['*']

@@ -22,54 +22,57 @@ import (
 	"os"
 	"testing"
 
-	"github.com/appvia/anchore-rbac/models"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/appvia/anchore-rbac/models"
 )
 
 const fakeAccounts = `
 principals:
-- name: analyzer
-  roles: [analyzer]
-- name: reporter
-  roles: [reporter]
+	analyzer:
+  	roles: [analyzer]
+		domains: [default]
+	reporter:
+  	roles: [reporter]
+    domains: [default]
+
 roles:
-- name: reporter
-  actions:
-  - getEvent
-  - getImage
-  - getImageEvaluation
-  - getPolicy
-  - getRegistry
-  - getService
-  - getSubscription
-  - listEvents
-  - listFeeds
-  - listImages
-  - listPolicies
-  - listRegistries
-  - listServices
-  - listSubscriptions
-  targets: ['*']
-- name: analyzer
-  actions:
-  - createImage
-  - getEvent
-  - getImage
-  - getImageEvaluation
-  - getSubscription
-  - listEvents
-  - listImages
-  - listSubscriptions
-  targets: ['*']
+	reporter:
+		actions:
+		- getEvent
+		- getImage
+		- getImageEvaluation
+		- getPolicy
+		- getRegistry
+		- getService
+		- getSubscription
+		- listEvents
+		- listFeeds
+		- listImages
+		- listPolicies
+		- listRegistries
+		- listServices
+		- listSubscriptions
+		targets: ['*']
+	analyzer:
+		actions:
+		- createImage
+		- getEvent
+		- getImage
+		- getImageEvaluation
+		- getSubscription
+		- listEvents
+		- listImages
+		- listSubscriptions
+		targets: ['*']
 `
 
-func makeTestAccounts() *Accounts {
-	return &Accounts{
-		Roles: []*Role{
-			{
-				Name: "analyzer",
+func makeTestAccounts() *Permissions {
+	return &Permissions{
+		Roles: map[string]*Role{
+			"analyzer": {
 				Actions: []string{
 					"createImage",
 					"getEvent",
@@ -82,8 +85,7 @@ func makeTestAccounts() *Accounts {
 				},
 				Targets: []string{"*"},
 			},
-			{
-				Name: "reporter",
+			"reporter": {
 				Actions: []string{
 					"getEvent",
 					"getImage",
@@ -103,18 +105,22 @@ func makeTestAccounts() *Accounts {
 				Targets: []string{"*"},
 			},
 		},
-		Principals: []*Principal{
-			{
-				Name:  "analyzer",
-				Roles: []string{"analyzer"},
+		Principals: map[string]*Principal{
+			"analyzer": {
+				Roles:   []string{"analyzer"},
+				Domains: []string{"default"},
 			},
-			{
-				Name:  "reports",
-				Roles: []string{"reporter"},
+			"reports": {
+				Roles:   []string{"reporter"},
+				Domains: []string{"default"},
 			},
-			{
-				Name:  "combined",
-				Roles: []string{"reporter", "analyzer"},
+			"combined": {
+				Roles:   []string{"reporter", "analyzer"},
+				Domains: []string{"default"},
+			},
+			"acp": {
+				Roles:   []string{"reporter", "analyzer"},
+				Domains: []string{"something"},
 			},
 		},
 	}
@@ -139,8 +145,7 @@ func TestNewFromReloadable(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, s)
 
-	sv := s.(*authzService)
-	fmt.Printf("%s\n", spew.Sdump(sv.principals))
+	//sv := s.(*authzService)
 }
 
 func TestHealth(t *testing.T) {
@@ -179,14 +184,14 @@ func TestAuthorize(t *testing.T) {
 			Request: &models.AuthorizationRequest{
 				Principal: &models.Principal{Name: s("no_there")},
 				Actions: models.ActionSet{
-					{Action: s("listimages"), Domain: s("images"), Target: s("*")},
+					{Action: s("listimages"), Domain: s("default"), Target: s("*")},
 				},
 			},
 			Expected: &models.AuthorizationDecision{
 				Principal: &models.Principal{Name: s("no_there")},
 				Allowed:   models.ActionSet{},
 				Denied: models.ActionSet{
-					{Action: s("listimages"), Domain: s("images"), Target: s("*")},
+					{Action: s("listimages"), Domain: s("default"), Target: s("*")},
 				},
 				TTL: &defaultTTL,
 			},
@@ -195,13 +200,13 @@ func TestAuthorize(t *testing.T) {
 			Request: &models.AuthorizationRequest{
 				Principal: &models.Principal{Name: s("analyzer")},
 				Actions: models.ActionSet{
-					{Action: s("getEvent"), Domain: s("images"), Target: s("*")},
+					{Action: s("getEvent"), Domain: s("default"), Target: s("*")},
 				},
 			},
 			Expected: &models.AuthorizationDecision{
 				Principal: &models.Principal{Name: s("analyzer")},
 				Allowed: models.ActionSet{
-					{Action: s("getEvent"), Domain: s("images"), Target: s("*")},
+					{Action: s("getEvent"), Domain: s("default"), Target: s("*")},
 				},
 				Denied: models.ActionSet{},
 				TTL:    &defaultTTL,
@@ -211,13 +216,13 @@ func TestAuthorize(t *testing.T) {
 			Request: &models.AuthorizationRequest{
 				Principal: &models.Principal{Name: s("analyzer")},
 				Actions: models.ActionSet{
-					{Action: s("getevent"), Domain: s("images"), Target: s("*")},
+					{Action: s("getEvent"), Domain: s("default"), Target: s("*")},
 				},
 			},
 			Expected: &models.AuthorizationDecision{
 				Principal: &models.Principal{Name: s("analyzer")},
 				Allowed: models.ActionSet{
-					{Action: s("getevent"), Domain: s("images"), Target: s("*")},
+					{Action: s("getEvent"), Domain: s("default"), Target: s("*")},
 				},
 				Denied: models.ActionSet{},
 				TTL:    &defaultTTL,
@@ -225,21 +230,37 @@ func TestAuthorize(t *testing.T) {
 		},
 		{
 			Request: &models.AuthorizationRequest{
+				Principal: &models.Principal{Name: s("acp")},
+				Actions: models.ActionSet{
+					{Action: s("getEvent"), Domain: s("default"), Target: s("*")},
+				},
+			},
+			Expected: &models.AuthorizationDecision{
+				Principal: &models.Principal{Name: s("acp")},
+				Allowed:   models.ActionSet{},
+				Denied: models.ActionSet{
+					{Action: s("getEvent"), Domain: s("default"), Target: s("*")},
+				},
+				TTL: &defaultTTL,
+			},
+		},
+		{
+			Request: &models.AuthorizationRequest{
 				Principal: &models.Principal{Name: s("combined")},
 				Actions: models.ActionSet{
-					{Action: s("createImage"), Domain: s("images"), Target: s("*")},
-					{Action: s("listRegistries"), Domain: s("images"), Target: s("*")},
-					{Action: s("bad"), Domain: s("images"), Target: s("*")},
+					{Action: s("createImage"), Domain: s("default"), Target: s("*")},
+					{Action: s("listRegistries"), Domain: s("default"), Target: s("*")},
+					{Action: s("bad"), Domain: s("default"), Target: s("*")},
 				},
 			},
 			Expected: &models.AuthorizationDecision{
 				Principal: &models.Principal{Name: s("combined")},
 				Allowed: models.ActionSet{
-					{Action: s("createImage"), Domain: s("images"), Target: s("*")},
-					{Action: s("listRegistries"), Domain: s("images"), Target: s("*")},
+					{Action: s("createImage"), Domain: s("default"), Target: s("*")},
+					{Action: s("listRegistries"), Domain: s("default"), Target: s("*")},
 				},
 				Denied: models.ActionSet{
-					{Action: s("bad"), Domain: s("images"), Target: s("*")},
+					{Action: s("bad"), Domain: s("default"), Target: s("*")},
 				},
 				TTL: &defaultTTL,
 			},
@@ -248,6 +269,10 @@ func TestAuthorize(t *testing.T) {
 	for _, c := range cases {
 		decision, err := svc.Authorize(c.Request)
 		assert.NoError(t, err)
-		assert.Equal(t, c.Expected, decision)
+		if !assert.Equal(t, c.Expected, decision) {
+			fmt.Printf("EXPECTED: %s\n", spew.Sdump(c.Expected))
+			fmt.Printf("GOT: %s\n", spew.Sdump(decision))
+
+		}
 	}
 }
