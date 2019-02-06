@@ -81,9 +81,7 @@ func (c *watchImpl) Read(data interface{}) error {
 	switch path.Ext(c.filename) {
 	case ".json":
 		err = json.Unmarshal(content, data)
-	case ".yaml":
-		fallthrough
-	case ".yml":
+	case ".yaml", ".yml":
 		fallthrough
 	default:
 		return yaml.Unmarshal(content, data)
